@@ -3,7 +3,7 @@ import os
 from time import perf_counter
 
 import pytest
-from PySide6.QtCore import QEventLoop, QPoint, QSettings, Qt, QTimer
+from PySide6.QtCore import QEventLoop, QPoint, QRect, QSettings, Qt, QTimer
 from PySide6.QtGui import QColor, QCursor, QFont, QPainter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QWidget
@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QWidget
 from conftest import sse_delta
 from transformagent.app import Workflow
 from transformagent.settings import Settings, qwen_environment_key
-from transformagent.windows import MOD_SHIFT
+from transformagent.windows import MOD_SHIFT, flush_desktop
 
 
 pytestmark = pytest.mark.desktop
@@ -43,6 +43,7 @@ class SourceWindow(QWidget):
     def paintEvent(self, _event):
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("white"))
+        painter.fillRect(3, 3, 5, 4, QColor("#3fa26f"))
         painter.setPen(QColor("#141923"))
         painter.setFont(self.font)
         for row, line in enumerate(self.lines):
@@ -65,12 +66,19 @@ def select_text(workflow, source):
     source.raise_()
     source.activateWindow()
     wait(150)
+    flush_desktop()
     start = source.mapToGlobal(QPoint(9, 7))
     end = source.mapToGlobal(QPoint(770, 111))
     QCursor.setPos(start)
     invoke_hotkey(workflow.hotkey.modifiers)
     until(lambda: workflow.overlay is not None and workflow.overlay.isVisible())
-    assert workflow.overlay.geometry().contains(start)
+    overlay = workflow.overlay
+    assert overlay.geometry().contains(start)
+    # Check the fixture's color marker in the actual capture before a live
+    # test can send any recognized text to the model.
+    marker = overlay.mapFromGlobal(source.mapToGlobal(QPoint(5, 5)))
+    sample = overlay.screen_snapshot.crop(QRect(marker, marker), overlay.width(), overlay.height())
+    assert tuple(sample[0, 0]) == (0x6F, 0xA2, 0x3F), "Capture does not show the test fixture"
     QCursor.setPos(start)
     USER32.mouse_event(0x0002, 0, 0, 0, 0)
     wait(35)
