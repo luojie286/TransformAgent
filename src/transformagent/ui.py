@@ -116,13 +116,17 @@ class TranslationWindow(QWidget):
         self.setObjectName("translationWindow")
         self.setWindowTitle("TransformAgent 翻译")
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        # 牧濑红莉栖红主题：酒红主色取自红莉栖的发色与开衫，米白底色呼应她的白大褂。
         self.setStyleSheet("""
-            QWidget#translationWindow { background: #fcfcfd; border: 1px solid #bdc9de; }
-            QLabel { color: #26344a; }
-            QLabel#section { font-weight: bold; }
-            QPlainTextEdit { background: #ffffff; color: #18243a; border: 1px solid #d8dfed;
+            QWidget#translationWindow { background: #fbf4f1; border: 2px solid #8e2f41; }
+            QLabel { color: #4a222b; }
+            QLabel#section { color: #8e2f41; font-weight: bold; }
+            QPlainTextEdit { background: #ffffff; color: #3d2126; border: 1px solid #e0c2bf;
                              border-radius: 5px; padding: 5px; }
-            QPushButton { padding: 4px 8px; }
+            QPushButton { background: #8e2f41; color: #fff7f4; border: 1px solid #6e2231;
+                          border-radius: 4px; padding: 4px 12px; }
+            QPushButton:hover { background: #a13a4c; }
+            QPushButton:pressed { background: #6e2231; }
         """)
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
