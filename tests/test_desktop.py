@@ -52,7 +52,7 @@ class SourceWindow(QWidget):
         painter.end()
 
 
-def invoke_hotkey(keys=(0x12, ord("A"), ord("S"))):
+def invoke_hotkey(keys=(0x11, 0x12, 0x10, ord("Y"))):
     for key in keys:
         USER32.keybd_event(key, 0, 0, 0)
     for key in reversed(keys):

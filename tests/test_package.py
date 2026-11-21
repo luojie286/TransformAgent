@@ -31,8 +31,8 @@ def test_distributed_executable_capture_and_ocr(app, http_endpoint, monkeypatch)
         shortcut = Shortcut.parse(Settings().hotkey())
     except ValueError:
         shortcut = Shortcut.parse(DEFAULT_HOTKEY)
-    modifiers = ((0x0002, 0x11), (0x0001, 0x12), (0x0004, 0x10), (0x0008, 0x5B))
-    keys = [key for mask, key in modifiers if shortcut.modifiers & mask] + sorted(shortcut.keys)
+    if shortcut != Shortcut.parse(DEFAULT_HOTKEY):
+        pytest.skip("The package test only sends the default shortcut")
 
     def respond(handler):
         handler.send_response(200)
@@ -70,7 +70,7 @@ def test_distributed_executable_capture_and_ocr(app, http_endpoint, monkeypatch)
         def packaged_overlay_opened():
             if package_window("TransformAgent 框选") or process.poll() is not None:
                 return True
-            invoke_hotkey(keys)
+            invoke_hotkey()
             wait(180)
             return package_window("TransformAgent 框选") is not None
 

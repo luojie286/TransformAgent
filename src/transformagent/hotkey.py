@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from PySide6.QtCore import QAbstractNativeEventFilter, QTimer
 
 
-DEFAULT_HOTKEY = "Alt+A+S"
+DEFAULT_HOTKEY = "Ctrl+Alt+Shift+Y"
 MODIFIERS = {"Ctrl": 0x0002, "Alt": 0x0001, "Shift": 0x0004, "Win": 0x0008}
 MODIFIER_KEYS = {
     0x11: MODIFIERS["Ctrl"], 0xA2: MODIFIERS["Ctrl"], 0xA3: MODIFIERS["Ctrl"],
