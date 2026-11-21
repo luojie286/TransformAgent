@@ -53,6 +53,24 @@ def test_glossary_retains_english_terms_inside_japanese_text():
     assert {"source": "React", "target": "React"} not in terms
 
 
+def test_glossary_covers_ai_terms_prefers_longer_matches_and_dedupes_case():
+    payload = request_payload(
+        "qwen-mt-flash",
+        "Fine-tuning the LLM with LoRA improved the React Native render pipeline.",
+    )
+    terms = payload["translation_options"]["terms"]
+    assert {"source": "Fine-tuning", "target": "Fine-tuning"} in terms
+    assert {"source": "LLM", "target": "LLM"} in terms
+    assert {"source": "LoRA", "target": "LoRA"} in terms
+    assert {"source": "React Native", "target": "React Native"} in terms
+    assert {"source": "React", "target": "React"} not in terms
+    deduped = request_payload("qwen-mt-flash", "llm vs LLM.")["translation_options"]["terms"]
+    assert deduped == [{"source": "llm", "target": "llm"}]
+    plural = request_payload("qwen-mt-flash", "Many pull requests hit the stack traces.")["translation_options"]["terms"]
+    assert {"source": "pull requests", "target": "pull requests"} in plural
+    assert {"source": "stack traces", "target": "stack traces"} in plural
+
+
 def test_http_stream_and_qwen_translation_options(app, http_endpoint):
     def response(handler):
         handler.send_response(200)

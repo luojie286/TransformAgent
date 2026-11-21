@@ -10,11 +10,91 @@ from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequ
 
 BAILIAN_ENDPOINT = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 DEFAULT_MODEL = "qwen-mt-flash"
-TERMS = (
-    "GitHub", "Issue", "pull request", "race condition", "React", "useEffect",
-    "render pipeline", "GitHub Actions", "stack trace", "deadlock", "null pointer",
-    "TypeScript", "Python", "API", "timeout", "WebSocket", "cache miss",
-)
+# 术语表按领域分组便于维护。收录标准：专有名词、缩写和有确定技术含义的复合词；
+# 日常用语（如 run、class、windows）不收入，避免被强制保留原文而破坏正常翻译。
+# 构建时展平为按长度降序的单一正则，一次扫描即可收集全部命中，长词优先保证
+# "React Native" 不会被拆成 "React"，词表扩大也不会带来逐词扫描的开销。
+GLOSSARY: dict[str, tuple[str, ...]] = {
+    "internet": (
+        "GitHub", "GitLab", "Bitbucket", "Issue", "pull request", "merge request",
+        "GitHub Actions", "GitLab CI", "CircleCI", "Travis CI", "Jenkins",
+        "npm", "PyPI", "Homebrew", "Docker", "Kubernetes", "Terraform", "Ansible",
+        "Nginx", "Redis", "MySQL", "PostgreSQL", "MongoDB", "SQLite",
+        "Kafka", "RabbitMQ", "Elasticsearch", "GraphQL", "gRPC", "WebSocket",
+        "HTTP", "HTTPS", "TCP", "UDP", "IP", "DNS", "CDN", "SSL", "TLS",
+        "OAuth", "JWT", "SSO", "CORS", "API", "REST API", "RESTful", "webhook",
+        "JSON", "XML", "YAML", "CSV", "URL", "URI", "Markdown", "LaTeX",
+        "SaaS", "PaaS", "IaaS", "CRM", "ERP", "SEO", "A/B test",
+        "README", "FAQ", "changelog", "MVP", "KPI", "OKR", "ROI", "B2B", "B2C",
+        "push notification",
+    ),
+    "programming": (
+        "Python", "JavaScript", "TypeScript", "Java", "C++", "C#", "Rust",
+        "Kotlin", "Swift", "PHP", "Ruby", "Scala", "MATLAB", "SQL", "HTML", "CSS", "Sass",
+        "React", "React Native", "Vue", "Vue.js", "Angular", "Svelte",
+        "Next.js", "Nuxt", "Node.js", "Deno", "Bun", "Express.js",
+        "Django", "Flask", "FastAPI", "Spring Boot", "Laravel", "Ruby on Rails",
+        ".NET", "Electron", "Qt", "PySide6", "Flutter", "Unity", "Unreal Engine",
+        "Visual Studio Code", "VS Code", "IntelliJ IDEA", "PyCharm", "Xcode", "Android Studio",
+        "Git", "SVN", "Linux", "Ubuntu", "Debian", "CentOS", "macOS",
+        "Android", "iOS", "iPadOS", "Chrome", "Firefox", "Safari",
+        "OpenAI", "Anthropic", "Hugging Face", "Stack Overflow",
+    ),
+    "engineering": (
+        "race condition", "stack trace", "null pointer", "deadlock", "memory leak",
+        "buffer overflow", "segmentation fault", "stack overflow", "code smell",
+        "design pattern", "dependency injection", "continuous integration",
+        "continuous delivery", "unit test", "integration test", "end-to-end test",
+        "test coverage", "regression test", "smoke test", "load test", "stress test",
+        "useEffect", "useState", "useCallback", "useMemo", "useRef", "useContext",
+        "render pipeline", "cache miss", "cache hit", "timeout", "hotfix", "rollback",
+        "time complexity", "space complexity", "binary search", "hash table",
+        "linked list", "binary tree", "red-black tree", "B-tree",
+        "merge sort", "quick sort", "bubble sort", "dynamic programming",
+        "greedy algorithm", "breadth-first search", "depth-first search", "Dijkstra",
+        "API gateway", "load balancing", "reverse proxy", "feature flag",
+        "code review", "merge conflict", "semantic versioning", "lock file",
+        "refactoring", "callback", "generics", "polymorphism", "inheritance",
+        "encapsulation", "serialization", "deserialization", "idempotent",
+        "pagination", "sharding", "replication", "ACID", "CAP theorem",
+        "stored procedure", "eventual consistency",
+    ),
+    "ai": (
+        "AI", "AGI", "LLM", "large language model", "GPT", "GPT-4", "GPT-4o",
+        "ChatGPT", "Claude", "Gemini", "Llama", "Qwen", "DeepSeek", "Mistral",
+        "Grok", "Copilot", "Midjourney", "Stable Diffusion", "DALL-E", "Sora",
+        "transformer", "self-attention", "attention mechanism", "neural network",
+        "deep learning", "machine learning", "supervised learning",
+        "unsupervised learning", "reinforcement learning", "transfer learning",
+        "fine-tuning", "pre-training", "prompt", "prompt engineering",
+        "few-shot learning", "zero-shot learning", "chain of thought",
+        "RAG", "retrieval-augmented generation", "AI agent", "agentic", "MCP",
+        "function calling", "hallucination", "RLHF", "DPO",
+        "tokenizer", "embedding", "word2vec", "BERT", "RoBERTa", "T5", "ViT",
+        "LoRA", "QLoRA", "knowledge distillation", "quantization", "pruning",
+        "inference", "overfitting", "underfitting", "gradient descent",
+        "backpropagation", "learning rate", "batch size", "loss function",
+        "activation function", "softmax", "dropout", "GPU", "TPU", "CPU",
+        "CUDA", "VRAM", "MoE", "mixture of experts", "multimodal",
+        "computer vision", "NLP", "natural language processing",
+        "speech recognition", "TTS", "text to speech", "OCR", "object detection",
+        "diffusion model", "text-to-image", "generative AI", "AIGC",
+    ),
+}
+
+
+def _glossary_pattern() -> re.Pattern:
+    terms = sorted(
+        (term for group in GLOSSARY.values() for term in group),
+        key=len,
+        reverse=True,
+    )
+    # 可选复数后缀覆盖 "pull requests" 这类复数形态；词表条目均按单数书写。
+    body = "|".join(re.escape(term) + "s?" for term in terms)
+    return re.compile(rf"(?<![A-Za-z0-9_])(?:{body})(?![A-Za-z0-9_])", re.IGNORECASE)
+
+
+GLOSSARY_PATTERN = _glossary_pattern()
 DIRECTION = (
     "Translate the source into natural Simplified Chinese. Keep technical terms, "
     "project and product names, code identifiers, code snippets and commands "
@@ -34,18 +114,17 @@ def request_payload(model: str, source: str) -> dict:
     payload = {"model": model, "stream": True}
     if model.startswith("qwen-mt-"):
         # Qwen-MT requires a single user message and passes controls separately.
-        known_terms = []
-        for term in TERMS:
-            match = re.search(rf"(?<![A-Za-z0-9_]){re.escape(term)}(?![A-Za-z0-9_])", source, re.IGNORECASE)
-            if match:
-                original = match.group()
-                known_terms.append({"source": original, "target": original})
+        # 单次扫描收集命中术语；按小写去重，保留文本中首次出现的大小写形态。
+        known_terms: dict[str, dict] = {}
+        for match in GLOSSARY_PATTERN.finditer(source):
+            original = match.group()
+            known_terms.setdefault(original.lower(), {"source": original, "target": original})
         payload["messages"] = [{"role": "user", "content": source}]
         payload["translation_options"] = {
             "source_lang": "auto",
             "target_lang": "Chinese",
             "domains": DIRECTION,
-            "terms": known_terms,
+            "terms": list(known_terms.values()),
         }
     else:
         payload["messages"] = [
