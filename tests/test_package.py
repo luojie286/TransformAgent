@@ -1,4 +1,4 @@
-from ctypes import wintypes
+from ctypes import POINTER, byref, wintypes
 import os
 from pathlib import Path
 import subprocess
@@ -9,7 +9,9 @@ from PySide6.QtGui import QCursor
 
 from conftest import sse_delta
 from test_desktop import USER32, invoke_hotkey, open_source, until, wait
-from transformagent.windows import HOTKEY_ID, MOD_NOREPEAT
+from transformagent.hotkey import DEFAULT_HOTKEY, Shortcut
+from transformagent.settings import Settings
+from transformagent.windows import flush_desktop
 
 pytestmark = pytest.mark.desktop
 
@@ -17,6 +19,7 @@ USER32.FindWindowW.argtypes = (wintypes.LPCWSTR, wintypes.LPCWSTR)
 USER32.FindWindowW.restype = wintypes.HWND
 USER32.IsWindowVisible.argtypes = (wintypes.HWND,)
 USER32.PostMessageW.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+USER32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, POINTER(wintypes.DWORD))
 
 
 def test_distributed_executable_capture_and_ocr(app, http_endpoint, monkeypatch):
@@ -24,15 +27,12 @@ def test_distributed_executable_capture_and_ocr(app, http_endpoint, monkeypatch)
     if not executable_arg:
         pytest.skip("Set TRANSFORMAGENT_PACKAGE_TEST to the packaged executable")
     executable = Path(executable_arg).resolve(strict=True)
-    from transformagent.windows import USER32 as hotkey_api
-
-    def alt_s_available():
-        if not hotkey_api.RegisterHotKey(None, HOTKEY_ID, 0x0001 | MOD_NOREPEAT, ord("S")):
-            return False
-        hotkey_api.UnregisterHotKey(None, HOTKEY_ID)
-        return True
-
-    assert alt_s_available(), "Alt+S is already in use"
+    try:
+        shortcut = Shortcut.parse(Settings().hotkey())
+    except ValueError:
+        shortcut = Shortcut.parse(DEFAULT_HOTKEY)
+    modifiers = ((0x0002, 0x11), (0x0001, 0x12), (0x0004, 0x10), (0x0008, 0x5B))
+    keys = [key for mask, key in modifiers if shortcut.modifiers & mask] + sorted(shortcut.keys)
 
     def respond(handler):
         handler.send_response(200)
@@ -52,19 +52,30 @@ def test_distributed_executable_capture_and_ocr(app, http_endpoint, monkeypatch)
     process = subprocess.Popen([executable], cwd=executable.parent)
     hwnd = None
     try:
-        def package_registered_hotkey():
-            if process.poll() is not None:
-                return True
-            return not alt_s_available()
+        def package_window(title):
+            window = USER32.FindWindowW(None, title)
+            pid = wintypes.DWORD()
+            if window:
+                USER32.GetWindowThreadProcessId(window, byref(pid))
+                if pid.value == process.pid and USER32.IsWindowVisible(window):
+                    return window
+            return None
 
-        until(package_registered_hotkey, timeout=15)
-        assert process.poll() is None
         source.raise_()
         source.activateWindow()
         wait(120)
+        flush_desktop()
         QCursor.setPos(source.mapToGlobal(QPoint(9, 7)))
-        invoke_hotkey()
-        until(lambda: USER32.IsWindowVisible(USER32.FindWindowW(None, "TransformAgent 框选")), timeout=8)
+
+        def packaged_overlay_opened():
+            if package_window("TransformAgent 框选") or process.poll() is not None:
+                return True
+            invoke_hotkey(keys)
+            wait(180)
+            return package_window("TransformAgent 框选") is not None
+
+        until(packaged_overlay_opened, timeout=15)
+        assert process.poll() is None
         USER32.mouse_event(0x0002, 0, 0, 0, 0)
         try:
             QCursor.setPos(source.mapToGlobal(QPoint(770, 111)))
@@ -74,8 +85,8 @@ def test_distributed_executable_capture_and_ocr(app, http_endpoint, monkeypatch)
         until(lambda: bool(calls) or process.poll() is not None, 12)
         assert process.poll() is None
         assert calls[0][2]["messages"][0]["content"] == english
-        hwnd = USER32.FindWindowW(None, "TransformAgent 翻译")
-        assert hwnd and USER32.IsWindowVisible(hwnd)
+        hwnd = package_window("TransformAgent 翻译")
+        assert hwnd
     finally:
         source.close()
         QCursor.setPos(previous_cursor)

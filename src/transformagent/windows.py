@@ -1,4 +1,4 @@
-"""Windows hotkey and in-memory monitor capture."""
+"""Windows in-memory monitor capture."""
 
 import ctypes
 from ctypes import wintypes
@@ -7,48 +7,12 @@ from math import ceil, floor
 
 import numpy as np
 from mss import MSS
-from PySide6.QtCore import QAbstractNativeEventFilter, QRect
+from PySide6.QtCore import QRect
 from PySide6.QtGui import QCursor, QGuiApplication, QImage
 
 
 USER32 = ctypes.WinDLL("user32", use_last_error=True)
-USER32.RegisterHotKey.argtypes = (wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT)
-USER32.UnregisterHotKey.argtypes = (wintypes.HWND, ctypes.c_int)
 USER32.GetPhysicalCursorPos.argtypes = (ctypes.POINTER(wintypes.POINT),)
-WM_HOTKEY = 0x0312
-MOD_ALT = 0x0001
-MOD_NOREPEAT = 0x4000
-HOTKEY_ID = 1
-
-
-class GlobalHotkey(QAbstractNativeEventFilter):
-    label = "Alt+S"
-
-    def __init__(self, application, callback):
-        super().__init__()
-        self.application = application
-        self.callback = callback
-        self.active = False
-
-    def register(self):
-        self.active = bool(USER32.RegisterHotKey(None, HOTKEY_ID, MOD_ALT | MOD_NOREPEAT, ord("S")))
-        if self.active:
-            self.application.installNativeEventFilter(self)
-        return self.active
-
-    def nativeEventFilter(self, event_type, message):
-        if bytes(event_type).startswith(b"windows_"):
-            msg = wintypes.MSG.from_address(int(message))
-            if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
-                self.callback()
-                return True, 0
-        return False, 0
-
-    def close(self):
-        if self.active:
-            USER32.UnregisterHotKey(None, HOTKEY_ID)
-            self.application.removeNativeEventFilter(self)
-            self.active = False
 
 
 @dataclass

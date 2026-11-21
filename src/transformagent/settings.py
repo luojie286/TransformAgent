@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 import keyring
 from PySide6.QtCore import QSettings
 
+from transformagent.hotkey import DEFAULT_HOTKEY
 from transformagent.translation import BAILIAN_ENDPOINT, DEFAULT_MODEL, TranslationConfig
 
 
@@ -44,6 +45,15 @@ class Settings:
 
     def model(self) -> str:
         return self.store.value("model", DEFAULT_MODEL, type=str)
+
+    def hotkey(self) -> str:
+        return self.store.value("capture_hotkey", DEFAULT_HOTKEY, type=str)
+
+    def save_hotkey(self, hotkey: str):
+        self.store.setValue("capture_hotkey", hotkey)
+        self.store.sync()
+        if self.store.status() != QSettings.Status.NoError:
+            raise OSError("本次运行已启用新快捷键，但无法保存到设置。")
 
     def config(self) -> TranslationConfig:
         override = os.getenv("TRANSFORMAGENT_API_URL")

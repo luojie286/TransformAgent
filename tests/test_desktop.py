@@ -6,10 +6,11 @@ import pytest
 from PySide6.QtCore import QEventLoop, QPoint, QRect, QSettings, Qt, QTimer
 from PySide6.QtGui import QColor, QCursor, QFont, QPainter
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QInputDialog, QWidget
 
 from conftest import sse_delta
 from transformagent.app import Workflow
+from transformagent.hotkey import Shortcut, USER32 as HOTKEY_API
 from transformagent.settings import Settings, qwen_environment_key
 from transformagent.windows import flush_desktop
 
@@ -51,8 +52,7 @@ class SourceWindow(QWidget):
         painter.end()
 
 
-def invoke_hotkey():
-    keys = (0x12, ord("S"))
+def invoke_hotkey(keys=(0x12, ord("A"), ord("S"))):
     for key in keys:
         USER32.keybd_event(key, 0, 0, 0)
     for key in reversed(keys):
@@ -60,22 +60,27 @@ def invoke_hotkey():
 
 
 def select_text(workflow, source):
-    source.raise_()
-    source.activateWindow()
-    wait(150)
-    flush_desktop()
     start = source.mapToGlobal(QPoint(9, 7))
     end = source.mapToGlobal(QPoint(770, 111))
-    QCursor.setPos(start)
-    invoke_hotkey()
-    until(lambda: workflow.overlay is not None and workflow.overlay.isVisible())
-    overlay = workflow.overlay
-    assert overlay.geometry().contains(start)
-    # Check the fixture's color marker in the actual capture before a live
-    # test can send any recognized text to the model.
-    marker = overlay.mapFromGlobal(source.mapToGlobal(QPoint(5, 5)))
-    sample = overlay.screen_snapshot.crop(QRect(marker, marker), overlay.width(), overlay.height())
-    assert tuple(sample[0, 0]) == (0x6F, 0xA2, 0x3F), "Capture does not show the test fixture"
+    for _ in range(3):
+        source.raise_()
+        source.activateWindow()
+        wait(150)
+        flush_desktop()
+        QCursor.setPos(start)
+        invoke_hotkey()
+        until(lambda: workflow.overlay is not None and workflow.overlay.isVisible())
+        overlay = workflow.overlay
+        assert overlay.geometry().contains(start)
+        # DWM can still show a preceding window on the first capture. Check
+        # the fixture's marker before allowing live tests to send any text.
+        marker = overlay.mapFromGlobal(source.mapToGlobal(QPoint(5, 5)))
+        sample = overlay.screen_snapshot.crop(QRect(marker, marker), overlay.width(), overlay.height())
+        if tuple(sample[0, 0]) == (0x6F, 0xA2, 0x3F):
+            break
+        workflow.close_overlay()
+    else:
+        pytest.fail("Capture does not show the test fixture")
     QCursor.setPos(start)
     USER32.mouse_event(0x0002, 0, 0, 0, 0)
     wait(35)
@@ -111,6 +116,44 @@ def open_source(app, lines, font="Segoe UI"):
     source.show()
     return source
 
+
+def test_shortcut_setting_is_saved_and_windows_conflicts_keep_it(app, desktop):
+    original = desktop.settings.hotkey()
+
+    def set_dialog_text():
+        dialog = app.activeModalWidget()
+        if isinstance(dialog, QInputDialog):
+            dialog.setTextValue("shift+ctrl+f9")
+            dialog.accept()
+
+    QTimer.singleShot(0, set_dialog_text)
+    desktop.hotkey_action.trigger()
+    try:
+        saved = Settings(QSettings(desktop.settings.store.fileName(), QSettings.Format.IniFormat))
+        assert saved.hotkey() == "Ctrl+Shift+F9"
+        assert "Ctrl+Shift+F9" in desktop.capture_action.text()
+        invoke_hotkey((0x11, 0x10, 0x78))  # Ctrl+Shift+F9
+        until(lambda: desktop.overlay is not None)
+        desktop.close_overlay()
+
+        occupied = Shortcut.parse("Ctrl+Alt+F10")
+        # Reserve a real Windows shortcut, independently of the app binding.
+        identifier = 0x5200
+        reserved = HOTKEY_API.RegisterHotKey(None, identifier, 0x0003, 0x79)
+        try:
+            assert not desktop.hotkey.register(occupied)
+            assert str(desktop.hotkey.shortcut) == "Ctrl+Shift+F9"
+            assert saved.hotkey() == "Ctrl+Shift+F9"
+            invoke_hotkey((0x11, 0x10, 0x78))
+            until(lambda: desktop.overlay is not None)
+        finally:
+            if reserved:
+                HOTKEY_API.UnregisterHotKey(None, identifier)
+    finally:
+        desktop.close_overlay()
+        assert desktop.hotkey.register(Shortcut.parse(original))
+        desktop.settings.save_hotkey(original)
+        desktop.update_hotkey_label()
 
 def test_global_hotkey_drag_real_ocr_popup_and_retry(app, desktop, http_endpoint, monkeypatch):
     attempts = []

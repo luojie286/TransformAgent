@@ -8,13 +8,14 @@ from time import perf_counter
 from keyring.errors import KeyringError
 from mss.exception import ScreenShotError
 from PySide6.QtCore import QObject, QPoint, QThread, Signal
-from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QInputDialog, QMenu, QMessageBox, QStyle, QSystemTrayIcon
 
+from transformagent.hotkey import DEFAULT_HOTKEY, GlobalHotkey, Shortcut
 from transformagent.ocr import OcrWorker, model_directory
 from transformagent.settings import Settings
 from transformagent.translation import TranslationClient
 from transformagent.ui import SelectionOverlay, SettingsDialog, TranslationWindow
-from transformagent.windows import GlobalHotkey, capture_at_cursor, flush_desktop
+from transformagent.windows import capture_at_cursor, flush_desktop
 
 
 LOGGER = logging.getLogger(__name__)
@@ -52,22 +53,55 @@ class Workflow(QObject):
         self.worker_thread.start()
         self.hotkey = GlobalHotkey(application, self.select)
         self.tray = QSystemTrayIcon(application.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView), self)
-        has_hotkey = self.hotkey.register()
-        shortcut = self.hotkey.label
-        self.tray.setToolTip(f"TransformAgent · {shortcut}" if has_hotkey else "TransformAgent")
+        try:
+            shortcut = Shortcut.parse(self.settings.hotkey())
+        except ValueError:
+            shortcut = Shortcut.parse(DEFAULT_HOTKEY)
+        self.hotkey.register(shortcut)
         menu = QMenu()
-        menu.addAction(f"框选翻译（{shortcut}）" if has_hotkey else "框选翻译", self.select)
+        self.capture_action = menu.addAction("框选翻译", self.select)
+        self.hotkey_action = menu.addAction("快捷键设置", self.open_hotkey_settings)
         menu.addAction("设置", self.open_settings)
         menu.addSeparator()
         menu.addAction("退出", application.quit)
         self.menu = menu
         self.tray.setContextMenu(menu)
+        self.update_hotkey_label()
         self.tray.show()
-        if not has_hotkey:
-            self.notify("全局快捷键已被占用，可通过托盘菜单开始框选。")
+        if not self.hotkey.active:
+            self.notify("无法启用全局快捷键。可在托盘里修改快捷键或直接开始框选。")
 
     def notify(self, message):
         self.tray.showMessage("TransformAgent", message, QSystemTrayIcon.MessageIcon.Warning)
+
+    def update_hotkey_label(self):
+        shortcut = self.hotkey.shortcut
+        self.tray.setToolTip(f"TransformAgent · {shortcut}" if shortcut else "TransformAgent")
+        self.capture_action.setText(f"框选翻译（{shortcut}）" if shortcut else "框选翻译")
+
+    def open_hotkey_settings(self):
+        parent = self.window if self.window.isVisible() else None
+        text = self.settings.hotkey()
+        while True:
+            text, accepted = QInputDialog.getText(
+                parent, "框选快捷键", "输入组合，例如 Ctrl+Shift+S 或 Alt+A+S。", text=text
+            )
+            if not accepted:
+                return
+            try:
+                shortcut = Shortcut.parse(text)
+            except ValueError as error:
+                QMessageBox.warning(parent, "快捷键未更改", str(error))
+                continue
+            if not self.hotkey.register(shortcut):
+                QMessageBox.warning(parent, "快捷键未更改", "无法启用这个组合键，可能已被占用。")
+                continue
+            self.update_hotkey_label()
+            try:
+                self.settings.save_hotkey(str(shortcut))
+            except OSError as error:
+                QMessageBox.warning(parent, "快捷键保存失败", str(error))
+            return
 
     def select(self):
         if self.overlay is not None:
