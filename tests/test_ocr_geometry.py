@@ -4,7 +4,7 @@ import pytest
 from PySide6.QtCore import QRect, QSize
 
 from transformagent.ocr import Recognizer, model_directory
-from transformagent.ui import floating_geometry
+from transformagent.ui import TranslationWindow, floating_geometry
 from transformagent.windows import ScreenFrame
 
 
@@ -59,3 +59,21 @@ def test_window_chooses_below_when_it_fits_and_stays_in_work_area():
     fallback = floating_geometry(near_bottom, screen, size)
     assert screen.contains(fallback)
     assert not fallback.intersects(near_bottom)
+
+
+def test_small_selection_keeps_actual_float_inside_screen_after_error(app):
+    screen = app.primaryScreen()
+    available = screen.availableGeometry()
+    anchor = QRect(available.right() - 219, available.bottom() - 24, 220, 25)
+    window = TranslationWindow()
+    try:
+        window.open(screen, anchor, anchor.size())
+        app.processEvents()
+        assert available.contains(window.geometry())
+        assert not window.geometry().intersects(anchor)
+        window.set_status("翻译服务拒绝访问，请检查 API Key、模型权限及地域。", retry=True, configure=True)
+        app.processEvents()
+        assert available.contains(window.geometry())
+        assert window.retry_button.isVisible() and window.settings_button.isVisible()
+    finally:
+        window.close()

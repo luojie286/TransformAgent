@@ -113,6 +113,8 @@ class TranslationWindow(QWidget):
 
     def __init__(self):
         super().__init__(None, FLOAT_FLAGS)
+        self.anchor = QRect()
+        self.selection_size = QSize()
         self.setObjectName("translationWindow")
         self.setWindowTitle("TransformAgent 翻译")
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
@@ -163,18 +165,29 @@ class TranslationWindow(QWidget):
     def open(self, screen, anchor, size):
         self.original.clear()
         self.translated.clear()
+        self.hide()
+        self.anchor = anchor
+        self.selection_size = size
         self.set_status("正在识别…")
         self.winId()
         self.windowHandle().setScreen(screen)
-        # Window matches the captured selection so the result feels tied to the source region.
-        self.setGeometry(floating_geometry(anchor, screen.availableGeometry(), size))
+        self.fit_to_screen(screen)
         self.show()
         self.raise_()
+
+    def fit_to_screen(self, screen):
+        self.layout().activate()
+        # The side-by-side panes need room even for a one-line capture.
+        # Include the current header's minimum before choosing an anchor side.
+        size = self.selection_size.expandedTo(QSize(420, 180)).expandedTo(self.minimumSizeHint())
+        self.setGeometry(floating_geometry(self.anchor, screen.availableGeometry(), size))
 
     def set_status(self, text, *, retry=False, configure=False):
         self.status.setText(text)
         self.retry_button.setVisible(retry)
         self.settings_button.setVisible(configure)
+        if self.isVisible():
+            self.fit_to_screen(self.screen())
 
     def append_translation(self, fragment):
         cursor = self.translated.textCursor()
