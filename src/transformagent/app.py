@@ -133,7 +133,7 @@ class Workflow(QObject):
         anchor = rect.translated(overlay.mapToGlobal(QPoint()))
         image = overlay.screen_snapshot.crop(rect, overlay.width(), overlay.height())
         self.close_overlay()
-        self.window.open(screen, anchor)
+        self.window.open(screen, anchor, rect.size())
         if self.ocr_running:
             # Keep just the latest crop while a previous native inference exits.
             self.pending = self.request_id, image

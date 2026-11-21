@@ -156,13 +156,14 @@ class TranslationWindow(QWidget):
         panes.addLayout(column, 1)
         return text
 
-    def open(self, screen, anchor):
+    def open(self, screen, anchor, size):
         self.original.clear()
         self.translated.clear()
         self.set_status("正在识别…")
         self.winId()
         self.windowHandle().setScreen(screen)
-        self.setGeometry(floating_geometry(anchor, screen.availableGeometry(), QSize(600, 238)))
+        # Window matches the captured selection so the result feels tied to the source region.
+        self.setGeometry(floating_geometry(anchor, screen.availableGeometry(), size))
         self.show()
         self.raise_()
 
