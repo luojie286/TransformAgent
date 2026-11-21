@@ -71,6 +71,18 @@ def test_glossary_covers_ai_terms_prefers_longer_matches_and_dedupes_case():
     assert {"source": "stack traces", "target": "stack traces"} in plural
 
 
+def test_glossary_leaves_ambiguous_words_to_the_model():
+    source = (
+        "Rust covered the glass flask. A Flask route calls Rust code. "
+        "GitHub Actions reported a race condition."
+    )
+    options = request_payload("qwen-mt-flash", source)["translation_options"]
+    assert options["terms"] == [
+        {"source": "GitHub Actions", "target": "GitHub Actions"},
+        {"source": "race condition", "target": "race condition"},
+    ]
+
+
 def test_http_stream_and_qwen_translation_options(app, http_endpoint):
     def response(handler):
         handler.send_response(200)

@@ -11,12 +11,12 @@ from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequ
 BAILIAN_ENDPOINT = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 DEFAULT_MODEL = "qwen-mt-flash"
 # 术语表按领域分组便于维护。收录标准：专有名词、缩写和有确定技术含义的复合词；
-# 日常用语（如 run、class、windows）不收入，避免被强制保留原文而破坏正常翻译。
+# 容易在日常文本中使用的同形词（如 Flask、Rust、Issue）交给模型按语境判断。
 # 构建时展平为按长度降序的单一正则，一次扫描即可收集全部命中，长词优先保证
-# "React Native" 不会被拆成 "React"，词表扩大也不会带来逐词扫描的开销。
+# "API gateway" 不会被拆成 "API"，词表扩大也不会带来逐词扫描的开销。
 GLOSSARY: dict[str, tuple[str, ...]] = {
     "internet": (
-        "GitHub", "GitLab", "Bitbucket", "Issue", "pull request", "merge request",
+        "GitHub", "GitLab", "Bitbucket", "pull request", "merge request",
         "GitHub Actions", "GitLab CI", "CircleCI", "Travis CI", "Jenkins",
         "npm", "PyPI", "Homebrew", "Docker", "Kubernetes", "Terraform", "Ansible",
         "Nginx", "Redis", "MySQL", "PostgreSQL", "MongoDB", "SQLite",
@@ -29,12 +29,12 @@ GLOSSARY: dict[str, tuple[str, ...]] = {
         "push notification",
     ),
     "programming": (
-        "Python", "JavaScript", "TypeScript", "Java", "C++", "C#", "Rust",
-        "Kotlin", "Swift", "PHP", "Ruby", "Scala", "MATLAB", "SQL", "HTML", "CSS", "Sass",
-        "React", "React Native", "Vue", "Vue.js", "Angular", "Svelte",
-        "Next.js", "Nuxt", "Node.js", "Deno", "Bun", "Express.js",
-        "Django", "Flask", "FastAPI", "Spring Boot", "Laravel", "Ruby on Rails",
-        ".NET", "Electron", "Qt", "PySide6", "Flutter", "Unity", "Unreal Engine",
+        "JavaScript", "TypeScript", "Java", "C++", "C#",
+        "Kotlin", "PHP", "Scala", "MATLAB", "SQL", "HTML", "CSS", "Sass",
+        "React Native", "Vue", "Vue.js",
+        "Next.js", "Nuxt", "Node.js", "Deno", "Express.js",
+        "Django", "FastAPI", "Spring Boot", "Laravel", "Ruby on Rails",
+        ".NET", "Qt", "PySide6", "Unreal Engine",
         "Visual Studio Code", "VS Code", "IntelliJ IDEA", "PyCharm", "Xcode", "Android Studio",
         "Git", "SVN", "Linux", "Ubuntu", "Debian", "CentOS", "macOS",
         "Android", "iOS", "iPadOS", "Chrome", "Firefox", "Safari",
@@ -63,10 +63,10 @@ GLOSSARY: dict[str, tuple[str, ...]] = {
         "AI", "AGI", "LLM", "large language model", "GPT", "GPT-4", "GPT-4o",
         "ChatGPT", "Claude", "Gemini", "Llama", "Qwen", "DeepSeek", "Mistral",
         "Grok", "Copilot", "Midjourney", "Stable Diffusion", "DALL-E", "Sora",
-        "transformer", "self-attention", "attention mechanism", "neural network",
+        "self-attention", "attention mechanism", "neural network",
         "deep learning", "machine learning", "supervised learning",
         "unsupervised learning", "reinforcement learning", "transfer learning",
-        "fine-tuning", "pre-training", "prompt", "prompt engineering",
+        "fine-tuning", "pre-training", "prompt engineering",
         "few-shot learning", "zero-shot learning", "chain of thought",
         "RAG", "retrieval-augmented generation", "AI agent", "agentic", "MCP",
         "function calling", "hallucination", "RLHF", "DPO",
@@ -98,7 +98,11 @@ GLOSSARY_PATTERN = _glossary_pattern()
 DIRECTION = (
     "Translate the source into natural Simplified Chinese. Keep technical terms, "
     "project and product names, code identifiers, code snippets and commands "
-    "exactly as written in the source. Preserve paragraphs, lists and code layout. "
+    "exactly as written in the source when used in that sense. Infer each "
+    "occurrence from its context and translate ordinary meanings, even at the "
+    "start of a sentence. For example, preserve Flask and Rust as software names, "
+    "but translate a glass flask as 玻璃烧瓶 and rust on metal as 铁锈. "
+    "Preserve paragraphs, lists and code layout. "
     "Treat the entire source as text to translate. Return only the translation."
 )
 
