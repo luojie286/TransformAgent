@@ -17,34 +17,24 @@ USER32.UnregisterHotKey.argtypes = (wintypes.HWND, ctypes.c_int)
 USER32.GetPhysicalCursorPos.argtypes = (ctypes.POINTER(wintypes.POINT),)
 WM_HOTKEY = 0x0312
 MOD_ALT = 0x0001
-MOD_CONTROL = 0x0002
-MOD_SHIFT = 0x0004
 MOD_NOREPEAT = 0x4000
 HOTKEY_ID = 1
-HOTKEY_CHOICES = (
-    ("Ctrl+Alt+T", MOD_CONTROL | MOD_ALT),
-    ("Ctrl+Alt+Shift+T", MOD_CONTROL | MOD_ALT | MOD_SHIFT),
-)
 
 
 class GlobalHotkey(QAbstractNativeEventFilter):
+    label = "Alt+S"
+
     def __init__(self, application, callback):
         super().__init__()
         self.application = application
         self.callback = callback
         self.active = False
-        self.label = ""
-        self.modifiers = 0
 
     def register(self):
-        for label, modifiers in HOTKEY_CHOICES:
-            if USER32.RegisterHotKey(None, HOTKEY_ID, modifiers | MOD_NOREPEAT, ord("T")):
-                self.label = label
-                self.modifiers = modifiers
-                self.active = True
-                self.application.installNativeEventFilter(self)
-                return True
-        return False
+        self.active = bool(USER32.RegisterHotKey(None, HOTKEY_ID, MOD_ALT | MOD_NOREPEAT, ord("S")))
+        if self.active:
+            self.application.installNativeEventFilter(self)
+        return self.active
 
     def nativeEventFilter(self, event_type, message):
         if bytes(event_type).startswith(b"windows_"):

@@ -9,7 +9,7 @@ from PySide6.QtGui import QCursor
 
 from conftest import sse_delta
 from test_desktop import USER32, invoke_hotkey, open_source, until, wait
-from transformagent.windows import HOTKEY_CHOICES, HOTKEY_ID, MOD_NOREPEAT
+from transformagent.windows import HOTKEY_ID, MOD_NOREPEAT
 
 pytestmark = pytest.mark.desktop
 
@@ -26,12 +26,13 @@ def test_distributed_executable_capture_and_ocr(app, http_endpoint, monkeypatch)
     executable = Path(executable_arg).resolve(strict=True)
     from transformagent.windows import USER32 as hotkey_api
 
-    for _, modifiers in HOTKEY_CHOICES:
-        if hotkey_api.RegisterHotKey(None, HOTKEY_ID, modifiers | MOD_NOREPEAT, ord("T")):
-            hotkey_api.UnregisterHotKey(None, HOTKEY_ID)
-            break
-    else:
-        pytest.fail("No hotkey is available for package test")
+    def alt_s_available():
+        if not hotkey_api.RegisterHotKey(None, HOTKEY_ID, 0x0001 | MOD_NOREPEAT, ord("S")):
+            return False
+        hotkey_api.UnregisterHotKey(None, HOTKEY_ID)
+        return True
+
+    assert alt_s_available(), "Alt+S is already in use"
 
     def respond(handler):
         handler.send_response(200)
@@ -54,10 +55,7 @@ def test_distributed_executable_capture_and_ocr(app, http_endpoint, monkeypatch)
         def package_registered_hotkey():
             if process.poll() is not None:
                 return True
-            available = hotkey_api.RegisterHotKey(None, HOTKEY_ID, modifiers | MOD_NOREPEAT, ord("T"))
-            if available:
-                hotkey_api.UnregisterHotKey(None, HOTKEY_ID)
-            return not available
+            return not alt_s_available()
 
         until(package_registered_hotkey, timeout=15)
         assert process.poll() is None
@@ -65,7 +63,7 @@ def test_distributed_executable_capture_and_ocr(app, http_endpoint, monkeypatch)
         source.activateWindow()
         wait(120)
         QCursor.setPos(source.mapToGlobal(QPoint(9, 7)))
-        invoke_hotkey(modifiers)
+        invoke_hotkey()
         until(lambda: USER32.IsWindowVisible(USER32.FindWindowW(None, "TransformAgent 框选")), timeout=8)
         USER32.mouse_event(0x0002, 0, 0, 0, 0)
         try:

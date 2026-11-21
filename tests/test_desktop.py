@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QWidget
 from conftest import sse_delta
 from transformagent.app import Workflow
 from transformagent.settings import Settings, qwen_environment_key
-from transformagent.windows import MOD_SHIFT, flush_desktop
+from transformagent.windows import flush_desktop
 
 
 pytestmark = pytest.mark.desktop
@@ -51,11 +51,8 @@ class SourceWindow(QWidget):
         painter.end()
 
 
-def invoke_hotkey(modifiers):
-    keys = [0x11, 0x12]
-    if modifiers & MOD_SHIFT:
-        keys.append(0x10)
-    keys.append(ord("T"))
+def invoke_hotkey():
+    keys = (0x12, ord("S"))
     for key in keys:
         USER32.keybd_event(key, 0, 0, 0)
     for key in reversed(keys):
@@ -70,7 +67,7 @@ def select_text(workflow, source):
     start = source.mapToGlobal(QPoint(9, 7))
     end = source.mapToGlobal(QPoint(770, 111))
     QCursor.setPos(start)
-    invoke_hotkey(workflow.hotkey.modifiers)
+    invoke_hotkey()
     until(lambda: workflow.overlay is not None and workflow.overlay.isVisible())
     overlay = workflow.overlay
     assert overlay.geometry().contains(start)
